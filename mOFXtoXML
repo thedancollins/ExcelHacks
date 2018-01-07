@@ -1,0 +1,109 @@
+Option Explicit
+
+'This code will convert an OFX file (Open Financial Exchange) to a standard XML document and open the file in Excel.
+'thedancollins.com
+
+Public Sub Convert_OFX_File_To_XML()
+
+Dim s As String
+Dim sFileName As String
+sFileName = "C:\Users\theda\Desktop\Stmt_07_05_2016_01_05_2018.OFX"
+
+Dim fd As Office.FileDialog
+
+Set fd = Application.FileDialog(msoFileDialogFilePicker)
+
+With fd
+
+    .AllowMultiSelect = False
+    .Title = "Please select an OFX file for XML conversion."
+    .Filters.Add "Online Financial Exchange (OFX)", "*.OFX"
+    .Filters.Add "All", "*.*"
+
+    If .Show = True Then
+        sFileName = .SelectedItems(1)
+    End If
+
+End With
+
+Dim strFileContent As String, strNewContent As String
+Dim iFile As Integer: iFile = FreeFile
+Open sFileName For Input As #iFile
+strFileContent = Input(LOF(iFile), iFile)
+Close #iFile
+
+Dim sTokens(10000) As String, sEndTokens(10000) As String
+Dim lTokenArrayIndex As Long, lEndTokenArrayIndex As Long
+Dim l As Long, lStartToken As Long, lEndToken As Long, lNextStartToken As Long, lEndTokenEnd As Long
+Dim c As String, c2 As String
+Dim sToken As String, sTokenEnd As String
+lTokenArrayIndex = 1
+lEndTokenArrayIndex = 1
+l = 1
+strNewContent = "<?xml version=""1.0""?>"
+While l < Len(strFileContent)
+    c = Mid(strFileContent, l, 1)
+    lStartToken = InStr(l, strFileContent, "<")
+    lEndToken = InStr(lStartToken, strFileContent, ">")
+    sToken = Mid(strFileContent, lStartToken, lEndToken - lStartToken + 1)
+    If sToken Like "</*" Then
+        sTokenEnd = sToken
+    Else
+        sTokenEnd = "</" + Mid(sToken, 2, lEndToken - lStartToken + 1)
+        strNewContent = strNewContent + sToken
+    End If
+    
+    c = Mid(strFileContent, lEndToken + 1, 1)
+    If c <> "<" Then
+        lNextStartToken = InStr(lEndToken + 1, strFileContent, "<")
+        If lNextStartToken = 0 Then
+            strNewContent = strNewContent + sEndTokens(lEndTokenArrayIndex - 1)
+            GoTo ExitWend
+        End If
+        strNewContent = strNewContent + Mid(strFileContent, lEndToken + 1, lNextStartToken - 1 - lEndToken) + sTokenEnd
+    Else
+        c2 = Mid(strFileContent, lEndToken + 2, 1)
+        If c2 <> "/" Then
+            If sToken = sTokenEnd Then
+                lTokenArrayIndex = lTokenArrayIndex - 1
+                sTokens(lTokenArrayIndex) = ""
+                lEndTokenArrayIndex = lEndTokenArrayIndex - 1
+                strNewContent = strNewContent + sEndTokens(lEndTokenArrayIndex)
+                sEndTokens(lEndTokenArrayIndex) = ""
+                lEndTokenEnd = InStr(lEndToken, strFileContent, ">")
+                l = lEndTokenEnd - 1
+            Else
+                sTokens(lTokenArrayIndex) = sToken
+                lTokenArrayIndex = lTokenArrayIndex + 1
+                sEndTokens(lEndTokenArrayIndex) = sTokenEnd
+                lEndTokenArrayIndex = lEndTokenArrayIndex + 1
+            End If
+        Else
+            lEndTokenArrayIndex = lEndTokenArrayIndex - 1
+            strNewContent = strNewContent + sEndTokens(lEndTokenArrayIndex)
+            lTokenArrayIndex = lTokenArrayIndex - 1
+            sTokens(lTokenArrayIndex) = ""
+            sEndTokens(lEndTokenArrayIndex) = ""
+            lEndTokenEnd = InStr(lEndToken, strFileContent, ">")
+            l = lEndTokenEnd - 1
+        End If
+    End If
+    
+    l = lEndToken + 1
+Wend
+
+
+ExitWend:
+Dim fso As Object
+Set fso = CreateObject("Scripting.FileSystemObject")
+Dim oFile As Object
+Set oFile = fso.CreateTextFile(Mid(sFileName, 1, Len(sFileName) - 4) & ".xml")
+oFile.WriteLine strNewContent
+oFile.Close
+Set fso = Nothing
+Set oFile = Nothing
+MsgBox "File Created: " & vbCrLf & Mid(sFileName, 1, Len(sFileName) - 4) & ".xml", vbOKOnly + vbInformation
+
+Workbooks.OpenXML Mid(sFileName, 1, Len(sFileName) - 4) & ".xml"
+
+End Sub
